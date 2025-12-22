@@ -5,316 +5,309 @@
 #define NOMINMAX
 
 #ifdef _WIN32
-#include <windows.h>
-#include <io.h>
 #include <fcntl.h>
+#include <io.h>
+#include <windows.h>
 #else
+#include <sys/ioctl.h>
 #include <unistd.h>
 #endif
+#include <algorithm>
 #include <array>
+#include <chrono>
 #include <iostream>
 #include <print>
-#include <chrono>
-#include <thread>
 #include <string>
-#include <algorithm>
+#include <thread>
 
 using screen = std::array<std::array<int, 300>, 300>;
 
-bool getTerminalSize(int& width, int& height)
-{
+bool getTerminalSize(int &width, int &height) {
 #ifdef _WIN32
-    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-    if (hConsole == INVALID_HANDLE_VALUE)
-        return false;
+  HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+  if (hConsole == INVALID_HANDLE_VALUE)
+    return false;
 
-    CONSOLE_SCREEN_BUFFER_INFO csbi;
-    if (!GetConsoleScreenBufferInfo(hConsole, &csbi))
-        return false;
+  CONSOLE_SCREEN_BUFFER_INFO csbi;
+  if (!GetConsoleScreenBufferInfo(hConsole, &csbi))
+    return false;
 
-    width = csbi.srWindow.Right - csbi.srWindow.Left + 1;
-    height = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
-    return true;
+  width = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+  height = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
+  return true;
 #else
-    winsize ws{};
-    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1)
-        return false;
+  winsize ws{};
+  if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1)
+    return false;
 
-    width = ws.ws_col;
-    height = ws.ws_row;
-    return true;
+  width = ws.ws_col;
+  height = ws.ws_row;
+  return true;
 #endif
 }
 
-void clearConsole()
-{
+void clearConsole() {
 #ifdef _WIN32
-    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-    if (hConsole == INVALID_HANDLE_VALUE)
-        return;
+  HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+  if (hConsole == INVALID_HANDLE_VALUE)
+    return;
 
-    CONSOLE_SCREEN_BUFFER_INFO csbi;
-    if (!GetConsoleScreenBufferInfo(hConsole, &csbi))
-        return;
+  CONSOLE_SCREEN_BUFFER_INFO csbi;
+  if (!GetConsoleScreenBufferInfo(hConsole, &csbi))
+    return;
 
-    DWORD cellCount = csbi.dwSize.X * csbi.dwSize.Y;
-    DWORD written;
+  DWORD cellCount = csbi.dwSize.X * csbi.dwSize.Y;
+  DWORD written;
 
-    COORD home = {0, 0};
+  COORD home = {0, 0};
 
-    FillConsoleOutputCharacterA(
-        hConsole,
-        ' ',
-        cellCount,
-        home,
-        &written
-    );
+  FillConsoleOutputCharacterA(hConsole, ' ', cellCount, home, &written);
 
-    FillConsoleOutputAttribute(
-        hConsole,
-        csbi.wAttributes,
-        cellCount,
-        home,
-        &written
-    );
+  FillConsoleOutputAttribute(hConsole, csbi.wAttributes, cellCount, home,
+                             &written);
 
-    SetConsoleCursorPosition(hConsole, home);
+  SetConsoleCursorPosition(hConsole, home);
 #else
-    // ANSI escape sequence: clear screen + move cursor home
-    std::cout << "\x1b[2J\x1b[H";
-    std::cout.flush();
+  // ANSI escape sequence: clear screen + move cursor home
+  std::cout << "\x1b[2J\x1b[H";
+  std::cout.flush();
 #endif
 }
 
-struct Color
-{
-    unsigned char r, g, b;
+struct Color {
+  unsigned char r, g, b;
 };
 
-int compactColor(const Color color)
-{
-    return static_cast<int>(color.r) * 1000000 + static_cast<int>(color.g) * 1000 + static_cast<int>(color.b);
+int compactColor(const Color color) {
+  return static_cast<int>(color.r) * 1000000 +
+         static_cast<int>(color.g) * 1000 + static_cast<int>(color.b);
 }
 
-inline void unpackColor(int packed, int& r, int& g, int& b)
-{
-    r = packed / 1'000'000;
-    g = (packed / 1'000) % 1'000;
-    b = packed % 1'000;
+inline void unpackColor(int packed, int &r, int &g, int &b) {
+  r = packed / 1'000'000;
+  g = (packed / 1'000) % 1'000;
+  b = packed % 1'000;
 }
 
-void drawPixel(screen& pixelBuff, const int x, const int y, const Color color)
-{
-    pixelBuff[y][x] = compactColor(color);
+void drawPixel(screen &pixelBuff, const int x, const int y, const Color color) {
+  pixelBuff[y][x] = compactColor(color);
 }
 
-void limitFPS(const int targetFps)
-{
-    using clock = std::chrono::steady_clock;
-    static auto nextFrame = clock::now();
+void limitFPS(const int targetFps) {
+  using clock = std::chrono::steady_clock;
+  static auto nextFrame = clock::now();
 
-    const auto frameDuration =
-        std::chrono::nanoseconds(1'000'000'000 / targetFps);
+  const auto frameDuration =
+      std::chrono::nanoseconds(1'000'000'000 / targetFps);
 
-    nextFrame += frameDuration;
-    std::this_thread::sleep_until(nextFrame);
+  nextFrame += frameDuration;
+  std::this_thread::sleep_until(nextFrame);
 }
 
-void hideCursor()
-{
-    std::cout << "\x1b[?25l";
+void hideCursor() { std::cout << "\x1b[?25l"; }
+
+void showCursor() { std::cout << "\x1b[?25h"; }
+
+void moveCursorHome() { std::cout << "\x1b[H"; }
+
+bool testTerminalSize(bool &terminalIsValid, int terminalWidth,
+                      int terminalHeight) {
+  if (terminalWidth < 300) {
+    // std::println("Terminal too small (Width: {})", terminalWidth);
+    limitFPS(15);
+    return true;
+  } else {
+    terminalIsValid = true;
+  }
+
+  if (terminalHeight < 150) {
+    // std::println("Terminal too small (Height: {})", terminalHeight);
+    limitFPS(15);
+    return true;
+  } else {
+    terminalIsValid = true;
+  }
+  return false;
 }
 
-void showCursor()
-{
-    std::cout << "\x1b[?25h";
-}
-
-void moveCursorHome()
-{
-    std::cout << "\x1b[H";
-}
-
-bool testTerminalSize(bool& terminalIsValid, int terminalWidth, int terminalHeight)
-{
-    if (terminalWidth < 300)
-    {
-        // std::println("Terminal too small (Width: {})", terminalWidth);
-        limitFPS(15);
-        return true;
-    }
-    else
-    {
-        terminalIsValid = true;
-    }
-
-    if (terminalHeight < 150)
-    {
-        // std::println("Terminal too small (Height: {})", terminalHeight);
-        limitFPS(15);
-        return true;
-    }
-    else
-    {
-        terminalIsValid = true;
-    }
-    return false;
-}
-
-void initializeTerminal()
-{
+void initializeTerminal() {
 #ifdef _WIN32
-    // NOTHING for Win32 renderer
+  // NOTHING for Win32 renderer
 #else
-    std::cout << "\x1b[?1049h\x1b[?25l";
+  std::cout << "\x1b[?1049h\x1b[?25l";
 #endif
 }
 
-void deinitializeTerminal()
-{
+void deinitializeTerminal() {
 #ifdef _WIN32
-    // NOTHING
+  // NOTHING
 #else
-    std::cout << "\x1b[?25h\x1b[?1049l";
+  std::cout << "\x1b[?25h\x1b[?1049l";
 #endif
 }
 
-WORD rgbToWinAttr(int r, int g, int b)
-{
-    WORD attr = 0;
+#ifdef _Win32
+WORD rgbToWinAttr(int r, int g, int b) {
+  WORD attr = 0;
 
-    if (r > 128) attr |= FOREGROUND_RED;
-    if (g > 128) attr |= FOREGROUND_GREEN;
-    if (b > 128) attr |= FOREGROUND_BLUE;
+  if (r > 128)
+    attr |= FOREGROUND_RED;
+  if (g > 128)
+    attr |= FOREGROUND_GREEN;
+  if (b > 128)
+    attr |= FOREGROUND_BLUE;
 
-    if (r > 200 || g > 200 || b > 200)
-        attr |= FOREGROUND_INTENSITY;
+  if (r > 200 || g > 200 || b > 200)
+    attr |= FOREGROUND_INTENSITY;
 
-    return attr;
+  return attr;
 }
 
-void drawBuff(const screen& pixelBuff)
-{
+#endif // _Win32
+
+void drawBuff(const screen &pixelBuff) {
 #ifdef _WIN32
-    static HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+  static HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
 
-    CONSOLE_SCREEN_BUFFER_INFO csbi;
-    GetConsoleScreenBufferInfo(hConsole, &csbi);
+  CONSOLE_SCREEN_BUFFER_INFO csbi;
+  GetConsoleScreenBufferInfo(hConsole, &csbi);
 
-    const int maxW =
-        csbi.srWindow.Right - csbi.srWindow.Left + 1;
-    const int maxH =
-        csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
+  const int maxW = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+  const int maxH = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
 
-    const int pixelHeight =
-        (int(pixelBuff.size()) & ~1);
-    const int pixelWidth =
-        int(pixelBuff[0].size());
+  const int pixelHeight = (int(pixelBuff.size()) & ~1);
+  const int pixelWidth = int(pixelBuff[0].size());
 
-    const int cellHeight =
-        std::min(pixelHeight / 2, maxH);
-    const int cellWidth =
-        std::min(pixelWidth, maxW);
+  const int cellHeight = std::min(pixelHeight / 2, maxH);
+  const int cellWidth = std::min(pixelWidth, maxW);
 
-    static std::vector<CHAR_INFO> buffer;
-    buffer.resize(cellWidth * cellHeight);
+  static std::vector<CHAR_INFO> buffer;
+  buffer.resize(cellWidth * cellHeight);
 
-    for (int y = 0; y < cellHeight; ++y)
-    {
-        for (int x = 0; x < cellWidth; ++x)
-        {
-            int ur, ug, ub;
-            int lr, lg, lb;
+  for (int y = 0; y < cellHeight; ++y) {
+    for (int x = 0; x < cellWidth; ++x) {
+      int ur, ug, ub;
+      int lr, lg, lb;
 
-            unpackColor(pixelBuff[y * 2][x], ur, ug, ub);
-            unpackColor(pixelBuff[y * 2 + 1][x], lr, lg, lb);
+      unpackColor(pixelBuff[y * 2][x], ur, ug, ub);
+      unpackColor(pixelBuff[y * 2 + 1][x], lr, lg, lb);
 
-            WORD fg = rgbToWinAttr(lr, lg, lb);
-            WORD bg = rgbToWinAttr(ur, ug, ub) << 4;
+      WORD fg = rgbToWinAttr(lr, lg, lb);
+      WORD bg = rgbToWinAttr(ur, ug, ub) << 4;
 
-            CHAR_INFO& c = buffer[y * cellWidth + x];
-            c.Char.UnicodeChar = L'\u2584';
-            c.Attributes = fg | bg;
-        }
+      CHAR_INFO &c = buffer[y * cellWidth + x];
+      c.Char.UnicodeChar = L'\u2584';
+      c.Attributes = fg | bg;
     }
+  }
 
-    COORD size = {
-        SHORT(cellWidth),
-        SHORT(cellHeight)
-    };
+  COORD size = {SHORT(cellWidth), SHORT(cellHeight)};
 
-    COORD zero = {0, 0};
+  COORD zero = {0, 0};
 
-    SMALL_RECT rect = {
-        0,
-        0,
-        SHORT(cellWidth - 1),
-        SHORT(cellHeight - 1)
-    };
+  SMALL_RECT rect = {0, 0, SHORT(cellWidth - 1), SHORT(cellHeight - 1)};
 
-    WriteConsoleOutputW(
-        hConsole,
-        buffer.data(),
-        size,
-        zero,
-        &rect
-    );
+  WriteConsoleOutputW(hConsole, buffer.data(), size, zero, &rect);
 
 #else
+  // Move cursor home + clear
+  write(STDOUT_FILENO, "\x1b[H\x1b[J", 6);
 
-    std::string frame;
-    frame.reserve(300 * 150 * 20);
+  int termW, termH;
+  getTerminalSize(termW, termH);
 
-    const size_t height = pixelBuff.size();
-    const size_t width = pixelBuff[0].size();
+  const size_t cellHeight = std::min(pixelBuff.size() / 2, size_t(termH));
+  const size_t cellWidth = std::min(pixelBuff[0].size(), size_t(termW));
 
-    for (size_t y = 0; y + 1 < height; y += 2)
-    {
-        for (size_t x = 0; x < width; ++x)
-        {
-            int ur, ug, ub;
-            int lr, lg, lb;
+  std::string frame;
+  frame.reserve(cellWidth * cellHeight * 12);
 
-            unpackColor(pixelBuff[y][x], ur, ug, ub);
-            unpackColor(pixelBuff[y + 1][x], lr, lg, lb);
+  auto appendInt = [&](int v) {
+    if (v >= 100) {
+      frame.push_back('0' + v / 100);
+      frame.push_back('0' + (v / 10) % 10);
+      frame.push_back('0' + v % 10);
+    } else if (v >= 10) {
+      frame.push_back('0' + v / 10);
+      frame.push_back('0' + v % 10);
+    } else {
+      frame.push_back('0' + v);
+    }
+  };
 
-            frame += std::format(
-                "\x1b[48;2;{};{};{}m\x1b[38;2;{};{};{}m▄",
-                ur, ug, ub, lr, lg, lb
-            );
-        }
-        frame += "\x1b[0m\n";
+  int lastUR = -1, lastUG = -1, lastUB = -1;
+  int lastLR = -1, lastLG = -1, lastLB = -1;
+
+  for (size_t y = 0; y < cellHeight; ++y) {
+    const size_t py = y * 2;
+
+    for (size_t x = 0; x < cellWidth; ++x) {
+      int ur, ug, ub;
+      int lr, lg, lb;
+
+      unpackColor(pixelBuff[py][x], ur, ug, ub);
+      unpackColor(pixelBuff[py + 1][x], lr, lg, lb);
+
+      if (ur != lastUR || ug != lastUG || ub != lastUB) {
+        frame.append("\x1b[48;2;");
+        appendInt(ur);
+        frame.push_back(';');
+        appendInt(ug);
+        frame.push_back(';');
+        appendInt(ub);
+        frame.push_back('m');
+        lastUR = ur;
+        lastUG = ug;
+        lastUB = ub;
+      }
+
+      if (lr != lastLR || lg != lastLG || lb != lastLB) {
+        frame.append("\x1b[38;2;");
+        appendInt(lr);
+        frame.push_back(';');
+        appendInt(lg);
+        frame.push_back(';');
+        appendInt(lb);
+        frame.push_back('m');
+        lastLR = lr;
+        lastLG = lg;
+        lastLB = lb;
+      }
+
+      frame.append("▄");
     }
 
-    std::cout << frame;
+    frame.append("\x1b[0m\n");
+    lastUR = lastUG = lastUB = -1;
+    lastLR = lastLG = lastLB = -1;
+  }
+
+  write(STDOUT_FILENO, frame.data(), frame.size());
 #endif
 }
 
-int main()
-{
-    bool running = true;
-    int terminalWidth, terminalHeight;
+int main() {
+  bool running = true;
+  int terminalWidth, terminalHeight;
 
-    initializeTerminal();
+  initializeTerminal();
 
-    auto* pixelBuff = new screen{};
-    drawPixel(*pixelBuff, 0, 0, {255, 0, 0});
+  auto *pixelBuff = new screen{};
+  drawPixel(*pixelBuff, 0, 0, {255, 0, 0});
 
-    while (running)
-    {
-        getTerminalSize(terminalWidth, terminalHeight);
+  while (running) {
+    getTerminalSize(terminalWidth, terminalHeight);
 
-        if (terminalWidth < 300 || terminalHeight < 150)
-        {
-            limitFPS(15);
-            continue;
-        }
-
-        drawBuff(*pixelBuff);
-        limitFPS(15);
+    if (terminalWidth < 300 || terminalHeight < 150) {
+      limitFPS(15);
+      continue;
     }
 
-    delete pixelBuff;
-    deinitializeTerminal();
-    return 0;
+    drawBuff(*pixelBuff);
+    limitFPS(15);
+  }
+
+  delete pixelBuff;
+  deinitializeTerminal();
+  return 0;
 }
