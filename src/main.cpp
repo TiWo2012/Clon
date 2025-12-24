@@ -68,35 +68,35 @@ std::vector<KeyEvent> pollInput() {
       KEY_EVENT_RECORD &key = rec.Event.KeyEvent;
       if (key.bKeyDown) {
         if (key.uChar.AsciiChar)
-          keys.push_back(key.uChar.AsciiChar);
+          keys.emplace_back(key.uChar.AsciiChar);
         else {
           switch (key.wVirtualKeyCode) {
           case VK_UP:
-            keys.push_back(KeyType::Up);
+            keys.emplace_back(KeyType::Up);
             break;
           case VK_DOWN:
-            keys.push_back(KeyType::Down);
+            keys.emplace_back(KeyType::Down);
             break;
           case VK_LEFT:
-            keys.push_back(KeyType::Left);
+            keys.emplace_back(KeyType::Left);
             break;
           case VK_RIGHT:
-            keys.push_back(KeyType::Right);
+            keys.emplace_back(KeyType::Right);
             break;
           case VK_RETURN:
-            keys.push_back(KeyType::Enter);
+            keys.emplace_back(KeyType::Enter);
             break;
           case VK_ESCAPE:
-            keys.push_back(KeyType::Escape);
+            keys.emplace_back(KeyType::Escape);
             break;
           case VK_BACK:
-            keys.push_back(KeyType::Backspace);
+            keys.emplace_back(KeyType::Backspace);
             break;
           case VK_TAB:
-            keys.push_back(KeyType::Tab);
+            keys.emplace_back(KeyType::Tab);
             break;
           default:
-            keys.push_back(KeyType::Unknown);
+            keys.emplace_back(KeyType::Unknown);
             break;
           }
         }
@@ -106,7 +106,7 @@ std::vector<KeyEvent> pollInput() {
   return keys;
 }
 
-WORD rgbToWinAttr(int r, int g, int b) {
+WORD rgbToWinAttr(const int r, const int g, const int b) {
   WORD attr = 0;
   if (r > 128)
     attr |= FOREGROUND_RED;
@@ -203,14 +203,14 @@ bool getTerminalSize(int &w, int &h) {
 void hideCursor() { std::cout << "\x1b[?25l"; }
 void showCursor() { std::cout << "\x1b[?25h"; }
 void moveCursorHome() { std::cout << "\x1b[H"; }
-void limitFPS(int fps) {
+void limitFPS(const int fps) {
   using clock = std::chrono::steady_clock;
   static auto nextFrame = clock::now();
   nextFrame += std::chrono::nanoseconds(1'000'000'000 / fps);
   std::this_thread::sleep_until(nextFrame);
 }
-void drawPixel(screen &buff, int x, int y, Color c) {
-  if (x < 0 || y < 0 || x >= int(buff[0].size()) || y >= int(buff.size()))
+void drawPixel(screen &buff, const int x, const int y, const Color c) {
+  if (x < 0 || y < 0 || x >= static_cast<int>(buff[0].size()) || y >= static_cast<int>(buff.size()))
     return;
   buff[y][x] = compactColor(c);
 }
@@ -237,25 +237,26 @@ void drawBuff(const screen &pixelBuff) {
   static HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
   CONSOLE_SCREEN_BUFFER_INFO csbi;
   GetConsoleScreenBufferInfo(hConsole, &csbi);
-  int maxW = csbi.srWindow.Right - csbi.srWindow.Left + 1;
-  int maxH = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
-  int h = int(buff.size()) & ~1, w = int(buff[0].size());
-  int cellH = std::min(h / 2, maxH);
-  int cellW = std::min(w, maxW);
+  const int maxW = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+  const int maxH = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
+  const int h = static_cast<int>(pixelBuff.size()) & ~1;
+  const int w = static_cast<int>(pixelBuff[0].size());
+  const int cellH = min(h / 2, maxH);
+  const int cellW = min(w, maxW);
   static std::vector<CHAR_INFO> buf(cellW * cellH);
   for (int y = 0; y < cellH; ++y) {
     for (int x = 0; x < cellW; ++x) {
       int ur, ug, ub, lr, lg, lb;
-      unpackColor(buff[y * 2][x], ur, ug, ub);
-      unpackColor(buff[y * 2 + 1][x], lr, lg, lb);
-      CHAR_INFO &ci = buf[y * cellW + x];
-      ci.Char.UnicodeChar = L'\u2584';
-      ci.Attributes =
+      unpackColor(pixelBuff[y * 2][x], ur, ug, ub);
+      unpackColor(pixelBuff[y * 2 + 1][x], lr, lg, lb);
+      auto &[Char, Attributes] = buf[y * cellW + x];
+      Char.UnicodeChar = L'\u2584';
+      Attributes =
           rgbToWinAttr(lr, lg, lb) | (rgbToWinAttr(ur, ug, ub) << 4);
     }
   }
-  COORD size = {SHORT(cellW), SHORT(cellH)}, zero = {0, 0};
-  SMALL_RECT rect = {0, 0, SHORT(cellW - 1), SHORT(cellH - 1)};
+  const COORD size = {static_cast<SHORT>(cellW), static_cast<SHORT>(cellH)}, zero = {0, 0};
+  SMALL_RECT rect = {0, 0, static_cast<SHORT>(cellW - 1), static_cast<SHORT>(cellH - 1)};
   WriteConsoleOutputW(hConsole, buf.data(), size, zero, &rect);
 #else
   write(STDOUT_FILENO, "\x1b[H\x1b[J", 6);
@@ -336,7 +337,7 @@ int main() {
   int termW, termH;
 
   bool running = true;
-  while (running) {
+  while (running == true) {
     if (getTerminalSize(termW, termH)) {
       if (termW < 300)
         continue;
@@ -344,43 +345,42 @@ int main() {
         continue;
     }
 
-    // auto keys = pollInput();
-    // for (auto &k : keys) {
-    //   if (std::holds_alternative<char>(k))
-    //     std::cout << "Char: " << std::get<char>(k) << "\n";
-    //   else {
-    //     switch (std::get<KeyType>(k)) {
-    //     case KeyType::Up:
-    //       std::cout << "Up\n";
-    //       break;
-    //     case KeyType::Down:
-    //       std::cout << "Down\n";
-    //       break;
-    //     case KeyType::Left:
-    //       std::cout << "Left\n";
-    //       break;
-    //     case KeyType::Right:
-    //       std::cout << "Right\n";
-    //       break;
-    //     case KeyType::Enter:
-    //       std::cout << "Enter\n";
-    //       break;
-    //     case KeyType::Escape:
-    //       std::cout << "Escape\n";
-    //       running = false;
-    //       break;
-    //     case KeyType::Backspace:
-    //       std::cout << "Backspace\n";
-    //       break;
-    //     case KeyType::Tab:
-    //       std::cout << "Tab\n";
-    //       break;2
-    //     default:
-    //       std::cout << "Unknown\n";
-    //       break;
-    //     }
-    //   }
-    // }
+    for (auto keys = pollInput(); auto &k : keys) {
+       if (std::holds_alternative<char>(k))
+         std::cout << "Char: " << std::get<char>(k) << "\n";
+       else {
+         switch (std::get<KeyType>(k)) {
+         case KeyType::Up:
+           std::cout << "Up\n";
+           break;
+         case KeyType::Down:
+           std::cout << "Down\n";
+           break;
+         case KeyType::Left:
+           std::cout << "Left\n";
+           break;
+         case KeyType::Right:
+           std::cout << "Right\n";
+           break;
+         case KeyType::Enter:
+           std::cout << "Enter\n";
+           break;
+         case KeyType::Escape:
+           std::cout << "Escape\n";
+           running = false;
+           break;
+         case KeyType::Backspace:
+           std::cout << "Backspace\n";
+           break;
+         case KeyType::Tab:
+           std::cout << "Tab\n";
+           break;
+         default:
+           std::cout << "Unknown\n";
+           break;
+         }
+       }
+     }
 
     drawBuff(*pixelBuff);
     limitFPS(15);
