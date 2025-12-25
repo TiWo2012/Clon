@@ -24,7 +24,10 @@ struct Color
     unsigned char r, g, b;
 };
 
-int compactColor(const Color c) { return c.r * 1000000 + c.g * 1000 + c.b; }
+int compactColor(Color c)
+{
+    return c.r * 1000000 + c.g * 1000 + c.b;
+}
 
 inline void unpackColor(int packed, int& r, int& g, int& b)
 {
@@ -64,70 +67,50 @@ std::vector<KeyEvent> pollInput()
     std::vector<KeyEvent> keys;
     HANDLE hIn = GetStdHandle(STD_INPUT_HANDLE);
     DWORD events = 0;
+
     if (!GetNumberOfConsoleInputEvents(hIn, &events) || events == 0)
         return keys;
 
     INPUT_RECORD rec;
     DWORD read;
+
     for (DWORD i = 0; i < events; ++i)
     {
-        if (!ReadConsoleInput(hIn, &rec, 1, &read))
-            break;
-        if (rec.EventType == KEY_EVENT)
+        ReadConsoleInput(hIn, &rec, 1, &read);
+        if (rec.EventType != KEY_EVENT)
+            continue;
+
+        auto& key = rec.Event.KeyEvent;
+        if (!key.bKeyDown)
+            continue;
+
+        if (key.uChar.AsciiChar)
+            keys.emplace_back(key.uChar.AsciiChar);
+        else
         {
-            KEY_EVENT_RECORD& key = rec.Event.KeyEvent;
-            if (key.bKeyDown)
+            switch (key.wVirtualKeyCode)
             {
-                if (key.uChar.AsciiChar)
-                    keys.emplace_back(key.uChar.AsciiChar);
-                else
-                {
-                    switch (key.wVirtualKeyCode)
-                    {
-                    case VK_UP:
-                        keys.emplace_back(KeyType::Up);
-                        break;
-                    case VK_DOWN:
-                        keys.emplace_back(KeyType::Down);
-                        break;
-                    case VK_LEFT:
-                        keys.emplace_back(KeyType::Left);
-                        break;
-                    case VK_RIGHT:
-                        keys.emplace_back(KeyType::Right);
-                        break;
-                    case VK_RETURN:
-                        keys.emplace_back(KeyType::Enter);
-                        break;
-                    case VK_ESCAPE:
-                        keys.emplace_back(KeyType::Escape);
-                        break;
-                    case VK_BACK:
-                        keys.emplace_back(KeyType::Backspace);
-                        break;
-                    case VK_TAB:
-                        keys.emplace_back(KeyType::Tab);
-                        break;
-                    default:
-                        keys.emplace_back(KeyType::Unknown);
-                        break;
-                    }
-                }
+            case VK_UP: keys.emplace_back(KeyType::Up); break;
+            case VK_DOWN: keys.emplace_back(KeyType::Down); break;
+            case VK_LEFT: keys.emplace_back(KeyType::Left); break;
+            case VK_RIGHT: keys.emplace_back(KeyType::Right); break;
+            case VK_RETURN: keys.emplace_back(KeyType::Enter); break;
+            case VK_ESCAPE: keys.emplace_back(KeyType::Escape); break;
+            case VK_BACK: keys.emplace_back(KeyType::Backspace); break;
+            case VK_TAB: keys.emplace_back(KeyType::Tab); break;
+            default: keys.emplace_back(KeyType::Unknown); break;
             }
         }
     }
     return keys;
 }
 
-WORD rgbToWinAttr(const int r, const int g, const int b)
+WORD rgbToWinAttr(int r, int g, int b)
 {
     WORD attr = 0;
-    if (r > 128)
-        attr |= FOREGROUND_RED;
-    if (g > 128)
-        attr |= FOREGROUND_GREEN;
-    if (b > 128)
-        attr |= FOREGROUND_BLUE;
+    if (r > 128) attr |= FOREGROUND_RED;
+    if (g > 128) attr |= FOREGROUND_GREEN;
+    if (b > 128) attr |= FOREGROUND_BLUE;
     if (r > 200 || g > 200 || b > 200)
         attr |= FOREGROUND_INTENSITY;
     return attr;
@@ -147,19 +130,26 @@ void enableRawInput()
     tcsetattr(STDIN_FILENO, TCSANOW, &t);
     fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK);
 }
-void restoreTerminal() { tcsetattr(STDIN_FILENO, TCSANOW, &origTerm); }
+
+void restoreTerminal()
+{
+    tcsetattr(STDIN_FILENO, TCSANOW, &origTerm);
+}
 
 std::vector<KeyEvent> pollInput()
 {
     std::vector<KeyEvent> keys;
     char buf[32];
     ssize_t n = read(STDIN_FILENO, buf, sizeof(buf));
+
     for (ssize_t i = 0; i < n; ++i)
         inputBuffer.push_back(buf[i]);
+
     while (!inputBuffer.empty())
     {
         char c = inputBuffer.front();
         inputBuffer.pop_front();
+
         if (c == '\x1b')
         {
             if (inputBuffer.size() >= 2 && inputBuffer[0] == '[')
@@ -167,39 +157,23 @@ std::vector<KeyEvent> pollInput()
                 char code = inputBuffer[1];
                 inputBuffer.pop_front();
                 inputBuffer.pop_front();
+
                 switch (code)
                 {
-                case 'A':
-                    keys.push_back(KeyType::Up);
-                    break;
-                case 'B':
-                    keys.push_back(KeyType::Down);
-                    break;
-                case 'C':
-                    keys.push_back(KeyType::Right);
-                    break;
-                case 'D':
-                    keys.push_back(KeyType::Left);
-                    break;
-                default:
-                    keys.push_back(KeyType::Unknown);
-                    break;
+                case 'A': keys.emplace_back(KeyType::Up); break;
+                case 'B': keys.emplace_back(KeyType::Down); break;
+                case 'C': keys.emplace_back(KeyType::Right); break;
+                case 'D': keys.emplace_back(KeyType::Left); break;
+                default: keys.emplace_back(KeyType::Unknown); break;
                 }
             }
-            else
-            {
-                inputBuffer.push_front(c);
-                break;
-            }
         }
-        else if (c == '\r' || c == '\n')
-            keys.push_back(KeyType::Enter);
-        else if (c == '\b' || c == 127)
-            keys.push_back(KeyType::Backspace);
-        else if (c == '\t')
-            keys.push_back(KeyType::Tab);
+        else if (c == '\n' || c == '\r')
+            keys.emplace_back(KeyType::Enter);
+        else if (c == 127)
+            keys.emplace_back(KeyType::Backspace);
         else
-            keys.push_back(c);
+            keys.emplace_back(c);
     }
     return keys;
 }
@@ -224,254 +198,209 @@ bool getTerminalSize(int& w, int& h)
     return true;
 }
 
-void hideCursor() { std::cout << "\x1b[?25l"; }
-void showCursor() { std::cout << "\x1b[?25h"; }
-void moveCursorHome() { std::cout << "\x1b[H"; }
-
-void limitFPS(const int fps)
+void limitFPS(int fps)
 {
     using clock = std::chrono::steady_clock;
-    static auto nextFrame = clock::now();
-    nextFrame += std::chrono::nanoseconds(1'000'000'000 / fps);
-    std::this_thread::sleep_until(nextFrame);
+    static auto next = clock::now();
+    next += std::chrono::nanoseconds(1'000'000'000 / fps);
+    std::this_thread::sleep_until(next);
 }
 
-void drawPixel(screen& buff, const int x, const int y, const Color c)
+class Window
 {
-    if (x < 0 || y < 0 || x >= static_cast<int>(buff[0].size()) || y >= static_cast<int>(buff.size()))
-        return;
-    buff[y][x] = compactColor(c);
-}
-
-void drawLine(screen& buff, const int x, const int y, const int x2, const int y2, const Color c)
-{
-    const int dx = std::abs(x2 - x);
-    const int dy = std::abs(y2 - y);
-    const int steps = max(dx, dy);
-    const int compactedColor = compactColor(c);
-
-    // Single-point line
-    if (steps == 0)
+public:
+    Window()
     {
-        if (y >= 0 && y < buff.size() &&
-            x >= 0 && x < buff[0].size())
-        {
-            buff[y][x] = compactedColor;
-        }
-        return;
+        clear({0, 0, 0});
     }
 
-    for (int i = 0; i <= steps; ++i)
+    void clear(Color c)
     {
-        float t = static_cast<float>(i) / steps;
+        int v = compactColor(c);
+        for (auto& row : buffer)
+            row.fill(v);
+    }
 
-        int x3 = static_cast<int>(x + t * (x2 - x));
-        int y3 = static_cast<int>(y + t * (y2 - y));
+    void drawPixel(int x, int y, Color c)
+    {
+        if (x < 0 || y < 0 || x >= 300 || y >= 300)
+            return;
+        buffer[y][x] = compactColor(c);
+    }
 
-        if (y3 >= 0 && y3 < buff.size() &&
-            x3 >= 0 && x3 < buff[0].size())
+    void drawLine(int x0, int y0, int x1, int y1, Color c)
+    {
+        int dx = abs(x1 - x0);
+        int dy = abs(y1 - y0);
+        int steps = max(dx, dy);
+
+        if (steps == 0)
         {
-            buff[y3][x3] = compactedColor;
+            drawPixel(x0, y0, c);
+            return;
+        }
+
+        int packed = compactColor(c);
+
+        for (int i = 0; i <= steps; ++i)
+        {
+            float t = static_cast<float>(i) / steps;
+            int x = static_cast<int>(x0 + t * (x1 - x0));
+            int y = static_cast<int>(y0 + t * (y1 - y0));
+
+            if (x >= 0 && y >= 0 && x < 300 && y < 300)
+                buffer[y][x] = packed;
         }
     }
-}
 
-void initializeTerminal()
-{
-#ifdef _WIN32
-    // nothing
-#else
-    std::cout << "\x1b[?1049h";
-    hideCursor();
-#endif
-}
-
-void deinitializeTerminal()
-{
-#ifdef _WIN32
-    // nothing
-#else
-    showCursor();
-    std::cout << "\x1b[?1049l";
-#endif
-}
-
-void drawBuff(const screen& pixelBuff)
-{
-#ifdef _WIN32
-    static HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-    CONSOLE_SCREEN_BUFFER_INFO csbi;
-    GetConsoleScreenBufferInfo(hConsole, &csbi);
-    const int maxW = csbi.srWindow.Right - csbi.srWindow.Left + 1;
-    const int maxH = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
-    const int h = static_cast<int>(pixelBuff.size()) & ~1;
-    const int w = static_cast<int>(pixelBuff[0].size());
-    const int cellH = min(h / 2, maxH);
-    const int cellW = min(w, maxW);
-    static std::vector<CHAR_INFO> buf(cellW * cellH);
-    for (int y = 0; y < cellH; ++y)
+    void present() const
     {
-        for (int x = 0; x < cellW; ++x)
-        {
-            int ur, ug, ub, lr, lg, lb;
-            unpackColor(pixelBuff[y * 2][x], ur, ug, ub);
-            unpackColor(pixelBuff[y * 2 + 1][x], lr, lg, lb);
-            auto& [Char, Attributes] = buf[y * cellW + x];
-            Char.UnicodeChar = L'\u2584';
-            Attributes =
-                rgbToWinAttr(lr, lg, lb) | (rgbToWinAttr(ur, ug, ub) << 4);
-        }
+        drawBuffer(buffer);
     }
-    const COORD size = {static_cast<SHORT>(cellW), static_cast<SHORT>(cellH)}, zero = {0, 0};
-    SMALL_RECT rect = {0, 0, static_cast<SHORT>(cellW - 1), static_cast<SHORT>(cellH - 1)};
-    WriteConsoleOutputW(hConsole, buf.data(), size, zero, &rect);
-#else
-    write(STDOUT_FILENO, "\x1b[H\x1b[J", 6);
-    int termW, termH;
-    getTerminalSize(termW, termH);
-    const size_t cellHeight = std::min(pixelBuff.size() / 2, size_t(termH));
-    const size_t cellWidth = std::min(pixelBuff[0].size(), size_t(termW));
-    std::string frame;
-    frame.reserve(cellWidth * cellHeight * 12);
-    auto appendInt = [&](int v)
+
+private:
+    screen buffer{};
+
+    static void drawBuffer(const screen& pixelBuff)
     {
-        if (v >= 100)
+#ifdef _WIN32
+        static HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+        CONSOLE_SCREEN_BUFFER_INFO csbi;
+        GetConsoleScreenBufferInfo(hConsole, &csbi);
+
+        int maxW = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+        int maxH = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
+
+        int h = pixelBuff.size() & ~1;
+        int w = pixelBuff[0].size();
+        int cellH = min(h / 2, maxH);
+        int cellW = min(w, maxW);
+
+        static std::vector<CHAR_INFO> buf(cellW * cellH);
+
+        for (int y = 0; y < cellH; ++y)
         {
-            frame.push_back('0' + v / 100);
-            frame.push_back('0' + (v / 10) % 10);
-            frame.push_back('0' + v % 10);
-        }
-        else if (v >= 10)
-        {
-            frame.push_back('0' + v / 10);
-            frame.push_back('0' + v % 10);
-        }
-        else
-        {
-            frame.push_back('0' + v);
-        }
-    };
-    int lastUR = -1, lastUG = -1, lastUB = -1;
-    int lastLR = -1, lastLG = -1, lastLB = -1;
-    for (size_t y = 0; y < cellHeight; ++y)
-    {
-        const size_t py = y * 2;
-        for (size_t x = 0; x < cellWidth; ++x)
-        {
-            int ur, ug, ub;
-            int lr, lg, lb;
-            unpackColor(pixelBuff[py][x], ur, ug, ub);
-            unpackColor(pixelBuff[py + 1][x], lr, lg, lb);
-            if (ur != lastUR || ug != lastUG || ub != lastUB)
+            for (int x = 0; x < cellW; ++x)
             {
+                int ur, ug, ub, lr, lg, lb;
+                unpackColor(pixelBuff[y * 2][x], ur, ug, ub);
+                unpackColor(pixelBuff[y * 2 + 1][x], lr, lg, lb);
+
+                auto& cell = buf[y * cellW + x];
+                cell.Char.UnicodeChar = L'\u2584';
+                cell.Attributes =
+                    rgbToWinAttr(lr, lg, lb) |
+                    (rgbToWinAttr(ur, ug, ub) << 4);
+            }
+        }
+
+        COORD size{(SHORT)cellW, (SHORT)cellH};
+        COORD zero{0, 0};
+        SMALL_RECT rect{0, 0, (SHORT)(cellW - 1), (SHORT)(cellH - 1)};
+        WriteConsoleOutputW(hConsole, buf.data(), size, zero, &rect);
+#else
+        write(STDOUT_FILENO, "\x1b[H\x1b[J", 6);
+
+        int termW, termH;
+        getTerminalSize(termW, termH);
+
+        size_t cellH = std::min(pixelBuff.size() / 2, size_t(termH));
+        size_t cellW = std::min(pixelBuff[0].size(), size_t(termW));
+
+        std::string frame;
+        frame.reserve(cellH * cellW * 12);
+
+        auto appendInt = [&](int v)
+        {
+            if (v >= 100)
+            {
+                frame.push_back('0' + v / 100);
+                frame.push_back('0' + (v / 10) % 10);
+                frame.push_back('0' + v % 10);
+            }
+            else if (v >= 10)
+            {
+                frame.push_back('0' + v / 10);
+                frame.push_back('0' + v % 10);
+            }
+            else
+                frame.push_back('0' + v);
+        };
+
+        for (size_t y = 0; y < cellH; ++y)
+        {
+            for (size_t x = 0; x < cellW; ++x)
+            {
+                int ur, ug, ub, lr, lg, lb;
+                unpackColor(pixelBuff[y * 2][x], ur, ug, ub);
+                unpackColor(pixelBuff[y * 2 + 1][x], lr, lg, lb);
+
                 frame.append("\x1b[48;2;");
-                appendInt(ur);
-                frame.push_back(';');
-                appendInt(ug);
-                frame.push_back(';');
-                appendInt(ub);
-                frame.push_back('m');
-                lastUR = ur;
-                lastUG = ug;
-                lastUB = ub;
-            }
-            if (lr != lastLR || lg != lastLG || lb != lastLB)
-            {
+                appendInt(ur); frame.push_back(';');
+                appendInt(ug); frame.push_back(';');
+                appendInt(ub); frame.push_back('m');
+
                 frame.append("\x1b[38;2;");
-                appendInt(lr);
-                frame.push_back(';');
-                appendInt(lg);
-                frame.push_back(';');
-                appendInt(lb);
-                frame.push_back('m');
-                lastLR = lr;
-                lastLG = lg;
-                lastLB = lb;
+                appendInt(lr); frame.push_back(';');
+                appendInt(lg); frame.push_back(';');
+                appendInt(lb); frame.push_back('m');
+
+                frame.append("▄");
             }
-            frame.append("▄");
+            frame.append("\x1b[0m\n");
         }
-        frame.append("\x1b[0m\n");
-        lastUR = lastUG = lastUB = -1;
-        lastLR = lastLG = lastLB = -1;
-    }
-    write(STDOUT_FILENO, frame.data(), frame.size());
+        write(STDOUT_FILENO, frame.data(), frame.size());
 #endif
-}
+    }
+};
 
 int main()
 {
 #ifndef _WIN32
     atexit(restoreTerminal);
 #endif
-    initializeTerminal();
     enableRawInput();
 
-    auto* pixelBuff = new screen{};
-    drawPixel(*pixelBuff, 0, 0, {255, 0, 0});
-    drawPixel(*pixelBuff, 0, 2, {0, 255, 0});
-    drawPixel(*pixelBuff, 2, 0, {0, 0, 255});
-    drawPixel(*pixelBuff, 0, 4, {0, 0, 255});
+    Window window;
 
-    drawLine(*pixelBuff, 4, 4, 14, 7, {255, 0, 0});
-
-    int termW, termH;
+    window.drawPixel(0, 0, {255, 0, 0});
+    window.drawPixel(2, 2, {0, 255, 0});
+    window.drawLine(4, 4, 40, 20, {255, 0, 0});
 
     bool running = true;
-    while (running == true)
-    {
-        if (getTerminalSize(termW, termH))
-        {
-            if (termW < 300)
-                continue;
-            if (termH < 150)
-                continue;
-        }
+    int termW = 0;
+    int termH = 0;
 
+    while (running)
+    {
+        // input
         for (auto keys = pollInput(); auto& k : keys)
         {
-            if (std::holds_alternative<char>(k))
-                std::cout << "Char: " << std::get<char>(k) << "\n";
-            else
+            if (!std::holds_alternative<char>(k) &&
+                std::get<KeyType>(k) == KeyType::Escape)
             {
-                switch (std::get<KeyType>(k))
-                {
-                case KeyType::Up:
-                    std::cout << "Up\n";
-                    break;
-                case KeyType::Down:
-                    std::cout << "Down\n";
-                    break;
-                case KeyType::Left:
-                    std::cout << "Left\n";
-                    break;
-                case KeyType::Right:
-                    std::cout << "Right\n";
-                    break;
-                case KeyType::Enter:
-                    std::cout << "Enter\n";
-                    break;
-                case KeyType::Escape:
-                    std::cout << "Escape\n";
-                    running = false;
-                    break;
-                case KeyType::Backspace:
-                    std::cout << "Backspace\n";
-                    break;
-                case KeyType::Tab:
-                    std::cout << "Tab\n";
-                    break;
-                default:
-                    std::cout << "Unknown\n";
-                    break;
-                }
+                running = false;
             }
         }
 
-        drawBuff(*pixelBuff);
+        // terminal size guard
+        if (!getTerminalSize(termW, termH))
+        {
+            limitFPS(15);
+            continue;
+        }
+
+        if (termW < 300 || termH < 150)
+        {
+            limitFPS(15);
+            continue;
+        }
+
+        // render
+        window.present();
         limitFPS(15);
     }
 
-    delete pixelBuff;
-    deinitializeTerminal();
     return 0;
 }
+
