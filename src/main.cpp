@@ -90,15 +90,24 @@ std::vector<KeyEvent> pollInput()
         {
             switch (key.wVirtualKeyCode)
             {
-            case VK_UP: keys.emplace_back(KeyType::Up); break;
-            case VK_DOWN: keys.emplace_back(KeyType::Down); break;
-            case VK_LEFT: keys.emplace_back(KeyType::Left); break;
-            case VK_RIGHT: keys.emplace_back(KeyType::Right); break;
-            case VK_RETURN: keys.emplace_back(KeyType::Enter); break;
-            case VK_ESCAPE: keys.emplace_back(KeyType::Escape); break;
-            case VK_BACK: keys.emplace_back(KeyType::Backspace); break;
-            case VK_TAB: keys.emplace_back(KeyType::Tab); break;
-            default: keys.emplace_back(KeyType::Unknown); break;
+            case VK_UP: keys.emplace_back(KeyType::Up);
+                break;
+            case VK_DOWN: keys.emplace_back(KeyType::Down);
+                break;
+            case VK_LEFT: keys.emplace_back(KeyType::Left);
+                break;
+            case VK_RIGHT: keys.emplace_back(KeyType::Right);
+                break;
+            case VK_RETURN: keys.emplace_back(KeyType::Enter);
+                break;
+            case VK_ESCAPE: keys.emplace_back(KeyType::Escape);
+                break;
+            case VK_BACK: keys.emplace_back(KeyType::Backspace);
+                break;
+            case VK_TAB: keys.emplace_back(KeyType::Tab);
+                break;
+            default: keys.emplace_back(KeyType::Unknown);
+                break;
             }
         }
     }
@@ -160,11 +169,16 @@ std::vector<KeyEvent> pollInput()
 
                 switch (code)
                 {
-                case 'A': keys.emplace_back(KeyType::Up); break;
-                case 'B': keys.emplace_back(KeyType::Down); break;
-                case 'C': keys.emplace_back(KeyType::Right); break;
-                case 'D': keys.emplace_back(KeyType::Left); break;
-                default: keys.emplace_back(KeyType::Unknown); break;
+                case 'A': keys.emplace_back(KeyType::Up);
+                    break;
+                case 'B': keys.emplace_back(KeyType::Down);
+                    break;
+                case 'C': keys.emplace_back(KeyType::Right);
+                    break;
+                case 'D': keys.emplace_back(KeyType::Left);
+                    break;
+                default: keys.emplace_back(KeyType::Unknown);
+                    break;
                 }
             }
         }
@@ -336,14 +350,19 @@ private:
                 unpackColor(pixelBuff[y * 2 + 1][x], lr, lg, lb);
 
                 frame.append("\x1b[48;2;");
-                appendInt(ur); frame.push_back(';');
-                appendInt(ug); frame.push_back(';');
-                appendInt(ub); frame.push_back('m');
+                appendInt(ur);
+                frame.push_back(';');
+                appendInt(ug);
+                frame.push_back(';');
+                appendInt(ub);
+                frame.push_back('m');
 
                 frame.append("\x1b[38;2;");
-                appendInt(lr); frame.push_back(';');
+                appendInt(lr);
+                frame.push_back(';');
                 appendInt(lg); frame.push_back(';');
-                appendInt(lb); frame.push_back('m');
+                appendInt(lb);
+                frame.push_back('m');
 
                 frame.append("▄");
             }
