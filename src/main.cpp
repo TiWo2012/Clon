@@ -251,24 +251,28 @@ void drawLine(screen& buff, const int x, const int y, const int x2, const int y2
     const int compactedColor = compactColor(c);
 
     // Single-point line
-    if (steps == 0) {
+    if (steps == 0)
+    {
         if (y >= 0 && y < buff.size() &&
-            x >= 0 && x < buff[0].size()) {
+            x >= 0 && x < buff[0].size())
+        {
             buff[y][x] = compactedColor;
-            }
+        }
         return;
     }
 
-    for (int i = 0; i <= steps; ++i) {
+    for (int i = 0; i <= steps; ++i)
+    {
         float t = static_cast<float>(i) / steps;
 
         int x3 = static_cast<int>(x + t * (x2 - x));
         int y3 = static_cast<int>(y + t * (y2 - y));
 
         if (y3 >= 0 && y3 < buff.size() &&
-            x3 >= 0 && x3 < buff[0].size()) {
+            x3 >= 0 && x3 < buff[0].size())
+        {
             buff[y3][x3] = compactedColor;
-            }
+        }
     }
 }
 
@@ -408,7 +412,7 @@ int main()
     drawPixel(*pixelBuff, 2, 0, {0, 0, 255});
     drawPixel(*pixelBuff, 0, 4, {0, 0, 255});
 
-    drawLine(*pixelBuff, 4, 4, 14, 7, {255,0,0});
+    drawLine(*pixelBuff, 4, 4, 14, 7, {255, 0, 0});
 
     int termW, termH;
 
